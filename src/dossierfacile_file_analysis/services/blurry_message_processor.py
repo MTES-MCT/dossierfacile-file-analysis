@@ -2,6 +2,7 @@ import json
 import elasticapm
 
 from dossierfacile_file_analysis.exceptions.invalid_message_body_format import InvalidMessageBodyFormat
+from dossierfacile_file_analysis.executor.blurry_executor import BlurryExecutor
 from dossierfacile_file_analysis.models.blurry_queue_message import BlurryQueueMessage
 
 
@@ -17,6 +18,8 @@ class BlurryMessageProcessor:
             try:
                 blurry_queue_message = BlurryQueueMessage.from_dict(json.loads(decoded_body))
                 elasticapm.set_custom_context({"blurry_queue_message": blurry_queue_message.to_dict()})
+                executor = BlurryExecutor(blurry_queue_message)
+                executor.execute()
             except Exception as e:
                 client.capture_exception()
                 client.end_transaction("message_processing", "failure")

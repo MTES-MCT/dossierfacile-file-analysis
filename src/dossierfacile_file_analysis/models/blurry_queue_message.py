@@ -3,7 +3,7 @@ class BlurryQueueMessage:
     Represents a message in the queue.
     """
 
-    def __init__(self, file_id: str):
+    def __init__(self, file_id: int):
         self.file_id = file_id
 
     def __repr__(self):
