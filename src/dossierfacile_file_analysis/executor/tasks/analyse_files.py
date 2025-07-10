@@ -35,8 +35,11 @@ class AnalyseFiles(AbstractBlurryTask):
 
         if list_of_results:
             # filter result to remove blank images
-            list_of_results = [result for result in list_of_results if not result.is_blank]
-            most_blurry = min(list_of_results, key=lambda r: r.laplacian_variance)
+            filtered_list_of_result = [result for result in list_of_results if not result.is_blank]
+            if not filtered_list_of_result:
+                most_blurry = list_of_results[0]
+            else :
+                most_blurry = min(filtered_list_of_result, key=lambda r: r.laplacian_variance)
             context.blurry_result = most_blurry
 
     def _is_blurry(self, file_path: str):

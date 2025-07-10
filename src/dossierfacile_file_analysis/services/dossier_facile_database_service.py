@@ -65,13 +65,31 @@ class DossierFacileDatabaseService:
             return None
 
     def save_blurry_result(self, file_id: int, blurry_result: BlurryResult):
-        cursor = self.__connection.cursor()
-        query = (
-            "INSERT INTO blurry_file_analysis (file_id, blurry_results, analysis_status) "
-            "VALUES (%s, %s, %s)"
-        )
-        blurry_results_json = json.dumps(blurry_result.to_dict())
-        cursor.execute(query, (file_id, blurry_results_json, "COMPLETED"))
-        self.__connection.commit()
-        cursor.close()
+        try:
+            cursor = self.__connection.cursor()
+            query = (
+                "INSERT INTO blurry_file_analysis (file_id, blurry_results, analysis_status) "
+                "VALUES (%s, %s, %s)"
+            )
+            blurry_results_json = json.dumps(blurry_result.to_dict())
+            cursor.execute(query, (file_id, blurry_results_json, "COMPLETED"))
+            self.__connection.commit()
+            cursor.close()
+        except Exception as e:
+            print(f"Failed to save failed analysis for file_id {file_id}: {e}")
+            self.__connection.rollback()
+
+    def save_failed_analysis(self, file_id: int):
+        try:
+            cursor = self.__connection.cursor()
+            query = (
+                "INSERT INTO blurry_file_analysis (file_id, analysis_status) "
+                "VALUES (%s, %s)"
+            )
+            cursor.execute(query, (file_id, "FAILED"))
+            self.__connection.commit()
+            cursor.close()
+        except Exception as e:
+            print(f"Failed to save failed analysis for file_id {file_id}: {e}")
+            self.__connection.rollback()
 

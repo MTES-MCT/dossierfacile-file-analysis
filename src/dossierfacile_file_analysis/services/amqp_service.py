@@ -52,16 +52,27 @@ class AmqpService:
             channel.basic_ack(delivery_tag=delivery_tag)
 
         def _retry_message():
+            retry_delay_ms = 3000  # 3 secondes
+            retry_queue = f"{self.queue_name}_retry"
+            # Déclare la file de retry avec TTL et DLX
+            channel.queue_declare(
+                queue=retry_queue,
+                durable=True,
+                arguments={
+                    "x-message-ttl": retry_delay_ms,
+                    "x-dead-letter-exchange": "",
+                    "x-dead-letter-routing-key": self.queue_name
+                }
+            )
             new_properties = pika.BasicProperties(
-                headers={"x-retry-count": properties.headers.get('x-retry-count', 0) + 1})
+                headers={"x-retry-count": properties.headers.get('x-retry-count', 0) + 1}
+            )
             channel.basic_publish(
                 exchange='',
-                routing_key=self.queue_name,
+                routing_key=retry_queue,
                 body=body,
                 properties=new_properties
             )
-
-        futur = self.executor.submit(BlurryMessageProcessor.process, body)
 
         def _on_done(future):
             try:
@@ -80,6 +91,7 @@ class AmqpService:
             finally:
                 self.connection.add_callback_threadsafe(_ack)
 
+        futur = self.executor.submit(BlurryMessageProcessor.process, body, properties.headers.get('x-retry-count', 0))
         futur.add_done_callback(_on_done)
 
     def start_listening(self):
