@@ -1,5 +1,6 @@
 import time
 
+from pytesseract import image_to_data
 import cv2
 import numpy as np
 
@@ -17,6 +18,7 @@ class AnalyseFiles(AbstractBlurryTask):
         self.laplacian_variance_threshold = 250
         self.mean_gray_threshold = 245
         self.proj_threshold = 0.6
+        self.average_confidence_threshold = 40
 
     def has_to_apply(self, context: BlurryExecutionContext) -> bool:
         if context.file_dto is None and context.downloaded_file is None and context.input_analysis_data is None:
@@ -45,9 +47,19 @@ class AnalyseFiles(AbstractBlurryTask):
 
     def _is_blurry(self, file_path: str):
         gray = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
-        return self._detect_blur_laplacian(gray)
+        return self._detect_blur_laplacian(gray, self.is_readable(gray))
 
-    def _detect_blur_laplacian(self, gray):
+    def is_readable(self, gray) -> bool:
+        data = image_to_data(gray, output_type='dict')
+        confidences = [int(conf) for conf in data['conf'] if conf != '-1']
+        if confidences:
+            avg_conf = sum(confidences) / len(confidences)
+        else:
+            avg_conf = 0
+        return avg_conf > self.average_confidence_threshold
+
+
+    def _detect_blur_laplacian(self, gray, is_readable: bool):
         # Calculate variance of Laplacian
         start_time = time.time()
 
@@ -55,14 +67,16 @@ class AnalyseFiles(AbstractBlurryTask):
             return BlurryResult(
                 laplacian_variance=-1,
                 is_blurry=False,
-                is_blank=True
+                is_blank=True,
+                is_readable=is_readable
             )
 
         y0, y1 = self._extract_text_band(gray)
         if y0 is None: return BlurryResult(
             laplacian_variance=-1,
             is_blurry=True,
-            is_blank=False
+            is_blank=False,
+            is_readable=is_readable
         )
 
         laplacian_var = float(cv2.Laplacian(gray[y0:y1], cv2.CV_64F).var())
@@ -72,7 +86,8 @@ class AnalyseFiles(AbstractBlurryTask):
         return BlurryResult(
             laplacian_variance=laplacian_var,
             is_blurry=laplacian_var < self.laplacian_variance_threshold,
-            is_blank=False
+            is_blank=False,
+            is_readable=is_readable
         )
 
     def _extract_text_band(self, gray):
@@ -88,4 +103,23 @@ class AnalyseFiles(AbstractBlurryTask):
         th = proj.max() * self.proj_threshold
         rows = np.where(proj > th)[0]
 
-        return (int(rows[0]), int(rows[-1])) if rows.size else (None, None)
+        if rows.size == 0:
+            return None, None
+
+        # Trouver la plus grande bande continue
+        bands = []
+        start = rows[0]
+        for i in range(1, len(rows)):
+            if rows[i] > rows[i - 1] + 5:
+                bands.append((start, rows[i - 1]))
+                start = rows[i]
+        bands.append((start, rows[-1]))
+
+        # Prendre la bande la plus haute
+        best_band = max(bands, key=lambda band: band[1] - band[0])
+
+        # On élargit un peu la bande pour être robuste (optionnel)
+        margin = 10
+        y0 = max(0, best_band[0] - margin)
+        y1 = min(gray.shape[0], best_band[1] + margin)
+        return y0, y1
