@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.models.blurry_execution_context import BlurryExecutionContext
 
 
@@ -24,7 +25,7 @@ class AbstractBlurryTask(ABC):
         This method should be implemented by subclasses to define the task's execution logic.
         """
         self.prepare_task_data(context)
-        print(f"Running task: {self.task_name} with context: {context.execution_id}")
+        logger.info(f"Running task: {self.task_name} with context: {context.execution_id}")
         self._internal_run(context)
 
     @abstractmethod

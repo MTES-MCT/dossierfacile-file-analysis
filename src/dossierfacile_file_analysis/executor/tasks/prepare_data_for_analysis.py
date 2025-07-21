@@ -2,6 +2,7 @@ import os
 
 import pymupdf
 
+from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.exceptions.invalid_mime_type import InvalidMimeTypeException
 from dossierfacile_file_analysis.executor.tasks.abstract_blurry_task import AbstractBlurryTask
 from dossierfacile_file_analysis.models.blurry_execution_context import BlurryExecutionContext
@@ -35,7 +36,7 @@ class PrepareDataForAnalysis(AbstractBlurryTask):
         zoom_y = 2.0
         mat = pymupdf.Matrix(zoom_x, zoom_y)
 
-        print("Converting PDF to images for file: ", pdf_file_name)
+        logger.info(f"Converting PDF to images for file: {pdf_file_name}")
         image_paths = []
 
         doc = pymupdf.open(filename=pdf_path)

@@ -3,6 +3,7 @@ import time
 import cv2
 import numpy as np
 
+from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.executor.tasks.abstract_blurry_task import AbstractBlurryTask
 from dossierfacile_file_analysis.models.blurry_execution_context import BlurryExecutionContext
 from dossierfacile_file_analysis.models.blurry_result import BlurryResult
@@ -23,7 +24,7 @@ class AnalyseFiles(AbstractBlurryTask):
         return True
 
     def _internal_run(self, context: BlurryExecutionContext):
-        print("Processing input analysis data...")
+        logger.info("Processing input analysis data...")
         list_of_results: list[BlurryResult] = []
         if context.input_analysis_data.type == SupportedContentType.PDF:
             # Process each image in the list of images
@@ -67,7 +68,7 @@ class AnalyseFiles(AbstractBlurryTask):
         laplacian_var = float(cv2.Laplacian(gray[y0:y1], cv2.CV_64F).var())
 
         end_time = time.time()
-        print(f"Laplacian variance calculation took: {end_time - start_time:.2f} seconds")
+        logger.info(f"Laplacian variance calculation took: {end_time - start_time:.2f} seconds")
         return BlurryResult(
             laplacian_variance=laplacian_var,
             is_blurry=laplacian_var < self.laplacian_variance_threshold,
