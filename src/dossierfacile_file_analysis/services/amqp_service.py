@@ -1,13 +1,14 @@
 import os
 import time
+
 from concurrent.futures.thread import ThreadPoolExecutor
+from dossierfacile_file_analysis.custom_logging.logging_config import logger
 
 import pika
 from pika.exceptions import AMQPConnectionError
 
 from dossierfacile_file_analysis.exceptions.retryable_exception import RetryableException
 from dossierfacile_file_analysis.services.blurry_message_processor import BlurryMessageProcessor
-
 
 class AmqpService:
     def __init__(self):
@@ -37,16 +38,15 @@ class AmqpService:
                 self.connection = pika.BlockingConnection(parameters)
                 self.channel = self.connection.channel()
                 self.channel.queue_declare(queue=self.queue_name, durable=True)
-                print("✅ Successfully connected to RabbitMQ")
+                logger.info("✅ Successfully connected to RabbitMQ")
                 return
             except AMQPConnectionError as e:
-                print(f"❌ Failed to connect to RabbitMQ: {e}. Retrying in 10 seconds...")
+                logger.error("❌ Failed to connect to RabbitMQ: {e}. Retrying in 10 seconds...")
                 time.sleep(10)
 
     def _message_callback(self, channel, method_frame, properties, body):
         delivery_tag = method_frame.delivery_tag
-        print(
-            f"📥 Received message from queue '{self.queue_name}': {body.decode()}; delivery_tag={delivery_tag}; header_frame={properties}")
+        logger.info(f"📥 Received message from queue '{self.queue_name}': {body.decode()}; delivery_tag={delivery_tag}; header_frame={properties}")
 
         def _ack():
             channel.basic_ack(delivery_tag=delivery_tag)
@@ -78,16 +78,16 @@ class AmqpService:
             try:
                 future.result()
             except RetryableException as e:
-                print(f"⚠️ Error processing message: {e}")
+                logger.warning(f"⚠️ Error processing message: {e}")
                 retry_count = properties.headers.get('x-retry-count', 0)
                 if retry_count < 3:
-                    print(f"🔄 Retrying message (attempt {retry_count + 1})")
+                    logger.info(f"🔄 Retrying message (attempt {retry_count + 1})")
                     self.connection.add_callback_threadsafe(_retry_message)
                 else:
-                    print("❌ Maximum retry attempts reached. Acknowledging message.")
+                    logger.error("❌ Maximum retry attempts reached. Acknowledging message.")
             except Exception as e:
-                print(f"❌ Error processing message: {e}")
-                print(f"Not retrying message due to non-retryable exception.")
+                logger.error(f"❌ Error processing message: {e}")
+                logger.error(f"Not retrying message due to non-retryable exception.")
             finally:
                 self.connection.add_callback_threadsafe(_ack)
 
@@ -104,7 +104,7 @@ class AmqpService:
             on_message_callback=self._message_callback
         )
 
-        print(f"👂 Listening for messages on queue '{self.queue_name}'. To exit press CTRL+C")
+        logger.info(f"👂 Listening for messages on queue '{self.queue_name}'. To exit press CTRL+C")
         try:
             self.channel.start_consuming()
         except KeyboardInterrupt:
@@ -114,4 +114,4 @@ class AmqpService:
         """Closes the connection to RabbitMQ."""
         if self.connection and not self.connection.is_closed:
             self.connection.close()
-            print("🔌 Connection to RabbitMQ closed.")
+            logger.info("🔌 Connection to RabbitMQ closed.")

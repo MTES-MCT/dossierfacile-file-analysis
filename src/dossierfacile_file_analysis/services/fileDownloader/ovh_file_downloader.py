@@ -4,6 +4,7 @@ import time
 import boto3
 from botocore.config import Config
 
+from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.data.FileDto import FileDto
 from dossierfacile_file_analysis.exceptions.retryable_exception import RetryableException
 from dossierfacile_file_analysis.services.fileDownloader.file_downloader import FileDownloader
@@ -12,7 +13,7 @@ from dossierfacile_file_analysis.services.fileDownloader.file_downloader import 
 class OVHFileDownloader(FileDownloader):
 
     def __init__(self):
-        print("Initializing OVHFileDownloader")
+        logger.info("Initializing OVHFileDownloader")
         super().__init__()
         self.encrypted_file_path = "/tmp/encrypted_file"
         self.s3_client = boto3.client(
@@ -25,7 +26,7 @@ class OVHFileDownloader(FileDownloader):
         )
 
     def download_file(self, file_dto: FileDto):
-        print("Downloading file from OVH storage")
+        logger.info("Downloading file from OVH storage")
         start_time = time.time()
         if not os.path.exists(self.encrypted_file_path):
             os.makedirs(self.encrypted_file_path)
@@ -37,5 +38,5 @@ class OVHFileDownloader(FileDownloader):
         downloaded_file = self.decrypt_file_with_key(encrypted_file_path, file_dto)
         os.remove(encrypted_file_path)
         end_time = time.time()
-        print(f"download and decrypt file take : {end_time - start_time:.2f} seconds")
+        logger.info(f"download and decrypt file take : {end_time - start_time:.2f} seconds")
         return downloaded_file

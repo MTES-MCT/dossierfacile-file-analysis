@@ -1,6 +1,7 @@
 import json
 import elasticapm
 
+from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.exceptions.invalid_message_body_format import InvalidMessageBodyFormat
 from dossierfacile_file_analysis.exceptions.retryable_exception import RetryableException
 from dossierfacile_file_analysis.executor.blurry_executor import BlurryExecutor
@@ -16,7 +17,7 @@ class BlurryMessageProcessor:
         client = elasticapm.get_client()
         client.begin_transaction("task")
         decoded_body = body.decode()
-        print(f"Received message: {decoded_body}")
+        logger.info(f"Received message: {decoded_body}")
         try:
             blurry_queue_message = BlurryQueueMessage.from_dict(json.loads(decoded_body))
         except Exception as e:

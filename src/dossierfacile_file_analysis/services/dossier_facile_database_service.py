@@ -5,6 +5,7 @@ import json
 
 import psycopg2
 
+from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.data.FileDto import FileDto
 from dossierfacile_file_analysis.models.blurry_result import BlurryResult
 
@@ -22,7 +23,7 @@ class DossierFacileDatabaseService:
 
     def __init__(self):
         if not hasattr(self, "_initialized"):
-            print("Initializing DatabaseService")
+            logger.info("Initializing DatabaseService")
             db_config = {
                 "dbname": os.getenv("DB_NAME"),
                 "user": os.getenv("DB_USER"),
@@ -35,7 +36,7 @@ class DossierFacileDatabaseService:
 
     def get_file_by_id(self, file_id):
         start_time = time.time()
-        print("Retrieving file by ID from the database")
+        logger.info("Retrieving file by ID from the database")
         cursor = self.__connection.cursor()
         # Requête SQL pour récupérer les données du fichier
         query = "SELECT " \
@@ -58,10 +59,10 @@ class DossierFacileDatabaseService:
             column_names = [desc[0] for desc in cursor.description]
             file_data_dict = dict(zip(column_names, file_data))
             end_time = time.time()
-            print(f"Database read take : {end_time - start_time:.2f} seconds")
+            logger.info(f"Database read take : {end_time - start_time:.2f} seconds")
             return FileDto(**file_data_dict)
         else:
-            print(f"No file found with file_id {file_id}")
+            logger.error(f"No file found with file_id {file_id}")
             return None
 
     def save_blurry_result(self, file_id: int, blurry_result: BlurryResult):
@@ -76,7 +77,7 @@ class DossierFacileDatabaseService:
             self.__connection.commit()
             cursor.close()
         except Exception as e:
-            print(f"Failed to save failed analysis for file_id {file_id}: {e}")
+            logger.error(f"Failed to save failed analysis for file_id {file_id}: {e}")
             self.__connection.rollback()
 
     def save_failed_analysis(self, file_id: int):
@@ -90,6 +91,6 @@ class DossierFacileDatabaseService:
             self.__connection.commit()
             cursor.close()
         except Exception as e:
-            print(f"Failed to save failed analysis for file_id {file_id}: {e}")
+            logger.error(f"Failed to save failed analysis for file_id {file_id}: {e}")
             self.__connection.rollback()
 

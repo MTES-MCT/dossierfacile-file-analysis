@@ -1,3 +1,4 @@
+from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.executor.tasks.abstract_blurry_task import AbstractBlurryTask
 from dossierfacile_file_analysis.executor.tasks.analyse_files import AnalyseFiles
 from dossierfacile_file_analysis.executor.tasks.clean_data import CleanData
@@ -35,11 +36,11 @@ class BlurryExecutor:
                 if task.has_to_apply(self.blurry_execution_context):
                     task.run(self.blurry_execution_context)
                 else:
-                    print(f"Skipping task: {task.task_name} for file_id: {self.blurry_execution_context.file_id}")
-            print(
+                    logger.info(f"Skipping task: {task.task_name} for file_id: {self.blurry_execution_context.file_id}")
+            logger.info(
                 f"Blurry file analysis completed for file_id: {self.blurry_execution_context.file_id} with execution_id: {self.blurry_execution_context.execution_id}"
             )
-            print(
+            logger.info(
                 f"Blurry result: {self.blurry_execution_context.blurry_result if self.blurry_execution_context.blurry_result else 'No result'}"
             )
         except Exception as e:
@@ -48,5 +49,5 @@ class BlurryExecutor:
             if self.cleanTask:
                 self.cleanTask.run(self.blurry_execution_context)
             else:
-                print("No clean task defined, skipping cleanup.")
+                logger.info("No clean task defined, skipping cleanup.")
 
