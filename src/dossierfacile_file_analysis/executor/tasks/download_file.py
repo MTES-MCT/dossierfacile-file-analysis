@@ -1,7 +1,7 @@
 from dossierfacile_file_analysis.executor.tasks.abstract_blurry_task import AbstractBlurryTask
 from dossierfacile_file_analysis.models.blurry_execution_context import BlurryExecutionContext
-from dossierfacile_file_analysis.services.fileDownloader.local_file_downloader import LocalFileDownloader
-from dossierfacile_file_analysis.services.fileDownloader.ovh_file_downloader import OVHFileDownloader
+from dossierfacile_file_analysis.services.file_downloader.local_file_downloader import LocalFileDownloader
+from dossierfacile_file_analysis.services.file_downloader.ovh_file_downloader import OVHFileDownloader
 
 
 class DownloadFile(AbstractBlurryTask):

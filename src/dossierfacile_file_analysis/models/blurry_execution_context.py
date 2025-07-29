@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from dossierfacile_file_analysis.data.FileDto import FileDto
+from dossierfacile_file_analysis.data.file_dto import FileDto
 from dossierfacile_file_analysis.models.blurry_queue_message import BlurryQueueMessage
 from dossierfacile_file_analysis.models.blurry_result import BlurryResult
 from dossierfacile_file_analysis.models.downloaded_file import DownloadedFile

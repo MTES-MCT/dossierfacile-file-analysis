@@ -6,7 +6,7 @@ import json
 import psycopg2
 
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
-from dossierfacile_file_analysis.data.FileDto import FileDto
+from dossierfacile_file_analysis.data.file_dto import FileDto
 from dossierfacile_file_analysis.models.blurry_result import BlurryResult
 
 

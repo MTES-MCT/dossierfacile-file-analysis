@@ -1,8 +1,8 @@
 import os
 
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
-from dossierfacile_file_analysis.data.FileDto import FileDto
-from dossierfacile_file_analysis.services.fileDownloader.file_downloader import FileDownloader
+from dossierfacile_file_analysis.data.file_dto import FileDto
+from dossierfacile_file_analysis.services.file_downloader.file_downloader import FileDownloader
 
 
 class LocalFileDownloader(FileDownloader):

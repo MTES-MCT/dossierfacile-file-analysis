@@ -6,7 +6,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
-from dossierfacile_file_analysis.data.FileDto import FileDto
+from dossierfacile_file_analysis.data.file_dto import FileDto
 from dossierfacile_file_analysis.exceptions.encryption_key_is_missing import EncryptionKeyIsMissingException
 from dossierfacile_file_analysis.models.downloaded_file import DownloadedFile
 
