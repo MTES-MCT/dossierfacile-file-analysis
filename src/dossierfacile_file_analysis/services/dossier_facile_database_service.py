@@ -48,7 +48,7 @@ class DossierFacileDatabaseService:
                 "sf.provider as provider " \
                 "FROM file as f " \
                 "join storage_file as sf on f.storage_file_id = sf.id " \
-                "join encryption_key as ek on sf.encryption_key_id = ek.id " \
+                "left join encryption_key as ek on sf.encryption_key_id = ek.id " \
                 "WHERE f.id = %s"
         cursor.execute(query, (file_id,))
 
