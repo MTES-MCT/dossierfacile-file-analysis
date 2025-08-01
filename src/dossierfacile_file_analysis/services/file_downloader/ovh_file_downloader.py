@@ -22,7 +22,7 @@ class OVHFileDownloader(FileDownloader):
             aws_access_key_id=os.getenv("OVH_S3_ACCESS_KEY"),
             aws_secret_access_key=os.getenv("OVH_S3_SECRET_KEY"),
             config=Config(signature_version="s3v4"),
-            region_name=os.getenv("OVH_S3_REGION")  # Adapter selon la région OVH
+            region_name=os.getenv("OVH_S3_REGION")
         )
 
     def download_file(self, file_dto: FileDto):

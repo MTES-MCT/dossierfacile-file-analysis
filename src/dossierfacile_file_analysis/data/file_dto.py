@@ -6,3 +6,6 @@ class FileDto:
         self.encryption_key = encryption_key
         self.encryption_key_version = encryption_key_version
         self.provider = provider
+
+    def get_system_name(self):
+        return self.path.replace("/", "_")
