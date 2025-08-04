@@ -9,6 +9,8 @@ from pika.exceptions import AMQPConnectionError
 
 from dossierfacile_file_analysis.exceptions.retryable_exception import RetryableException
 from dossierfacile_file_analysis.services.blurry_message_processor import BlurryMessageProcessor
+from dossierfacile_file_analysis.services.dossier_facile_database_service import DossierFacileDatabaseService
+
 
 class AmqpService:
     def __init__(self):
@@ -20,6 +22,7 @@ class AmqpService:
         self.executor = None
         self.connection = None
         self.channel = None
+        self.database_service = DossierFacileDatabaseService()
 
     def _connect(self):
         """Establishes a connection to the RabbitMQ server."""
@@ -114,4 +117,5 @@ class AmqpService:
         """Closes the connection to RabbitMQ."""
         if self.connection and not self.connection.is_closed:
             self.connection.close()
+            self.database_service.close_all_connections()
             logger.info("🔌 Connection to RabbitMQ closed.")
