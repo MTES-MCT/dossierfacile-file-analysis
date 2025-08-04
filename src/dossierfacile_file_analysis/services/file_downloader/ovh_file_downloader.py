@@ -29,7 +29,7 @@ class OVHFileDownloader(FileDownloader):
         logger.info("Downloading file from OVH storage")
         start_time = time.time()
         if not os.path.exists(self.encrypted_file_path):
-            os.makedirs(self.encrypted_file_path)
+            os.makedirs(self.encrypted_file_path, exist_ok=True)
         encrypted_file_path = os.path.join(self.encrypted_file_path, os.path.basename(file_dto.path))
         try:
             self.s3_client.download_file(os.getenv("OVH_S3_BUCKET"), file_dto.path, encrypted_file_path)
