@@ -102,12 +102,18 @@ class AmqpService:
         self._connect()
         self.executor = ThreadPoolExecutor(max_workers=4)
 
+        # Configure prefetch pour optimiser la distribution entre hosts et threads
+        # prefetch_count=4 permet à chaque host de traiter 4 messages simultanément
+        # tout en évitant qu'un même message soit traité par plusieurs hosts
+        self.channel.basic_qos(prefetch_count=4)  # 1 message par thread maximum
+
         self.channel.basic_consume(
             queue=self.queue_name,
-            on_message_callback=self._message_callback
+            on_message_callback=self._message_callback,
+            auto_ack=False  # Manual acknowledgment - CRITIQUE pour éviter la duplication
         )
 
-        logger.info(f"👂 Listening for messages on queue '{self.queue_name}'. To exit press CTRL+C")
+        logger.info(f"👂 Listening for messages on queue '{self.queue_name}' with {4} workers per host")
         try:
             self.channel.start_consuming()
         except KeyboardInterrupt:

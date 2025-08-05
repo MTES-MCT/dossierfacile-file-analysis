@@ -47,16 +47,36 @@ class AnalyseFiles(AbstractBlurryTask):
 
     def _is_blurry(self, file_path: str):
         gray = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
-        return self._detect_blur_laplacian(gray, self.is_readable(gray))
+        if gray is None:
+            logger.error(f"Failed to load image: {file_path}")
+            return BlurryResult(
+                laplacian_variance=-1,
+                is_blurry=True,
+                is_blank=False,
+                is_readable=False
+            )
+
+        try:
+            result = self._detect_blur_laplacian(gray, self.is_readable(gray))
+            return result
+        finally:
+            # Libérer explicitement la mémoire OpenCV
+            del gray
 
     def is_readable(self, gray) -> bool:
-        data = image_to_data(gray, output_type='dict')
-        confidences = [int(conf) for conf in data['conf'] if conf != '-1']
-        if confidences:
-            avg_conf = sum(confidences) / len(confidences)
-        else:
-            avg_conf = 0
-        return avg_conf > self.average_confidence_threshold
+        data = None
+        try:
+            data = image_to_data(gray, output_type='dict')
+            confidences = [int(conf) for conf in data['conf'] if conf != '-1']
+            if confidences:
+                avg_conf = sum(confidences) / len(confidences)
+            else:
+                avg_conf = 0
+            return avg_conf > self.average_confidence_threshold
+        finally:
+            # Libérer les données Tesseract qui peuvent être volumineuses
+            if data is not None:
+                del data
 
 
     def _detect_blur_laplacian(self, gray, is_readable: bool):
@@ -72,14 +92,22 @@ class AnalyseFiles(AbstractBlurryTask):
             )
 
         y0, y1 = self._extract_text_band(gray)
-        if y0 is None: return BlurryResult(
-            laplacian_variance=-1,
-            is_blurry=True,
-            is_blank=False,
-            is_readable=is_readable
-        )
+        if y0 is None:
+            return BlurryResult(
+                laplacian_variance=-1,
+                is_blurry=True,
+                is_blank=False,
+                is_readable=is_readable
+            )
 
-        laplacian_var = float(cv2.Laplacian(gray[y0:y1], cv2.CV_64F).var())
+        # Créer la matrice Laplacienne et la libérer explicitement
+        laplacian = None
+        try:
+            laplacian = cv2.Laplacian(gray[y0:y1], cv2.CV_64F)
+            laplacian_var = float(laplacian.var())
+        finally:
+            if laplacian is not None:
+                del laplacian
 
         end_time = time.time()
         logger.info(f"Laplacian variance calculation took: {end_time - start_time:.2f} seconds")
@@ -91,35 +119,49 @@ class AnalyseFiles(AbstractBlurryTask):
         )
 
     def _extract_text_band(self, gray):
-        bw = cv2.adaptiveThreshold(
-            gray, 255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY,
-            blockSize=25, C=10
-        )
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 3))
-        bw = cv2.morphologyEx(bw, cv2.MORPH_OPEN, kernel)
-        proj = np.sum(bw // 255, axis=1)
-        th = proj.max() * self.proj_threshold
-        rows = np.where(proj > th)[0]
+        bw = None
+        kernel = None
+        proj = None
 
-        if rows.size == 0:
-            return None, None
+        try:
+            bw = cv2.adaptiveThreshold(
+                gray, 255,
+                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY,
+                blockSize=25, C=10
+            )
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 3))
+            bw = cv2.morphologyEx(bw, cv2.MORPH_OPEN, kernel)
+            proj = np.sum(bw // 255, axis=1)
+            th = proj.max() * self.proj_threshold
+            rows = np.where(proj > th)[0]
 
-        # Trouver la plus grande bande continue
-        bands = []
-        start = rows[0]
-        for i in range(1, len(rows)):
-            if rows[i] > rows[i - 1] + 5:
-                bands.append((start, rows[i - 1]))
-                start = rows[i]
-        bands.append((start, rows[-1]))
+            if rows.size == 0:
+                return None, None
 
-        # Prendre la bande la plus haute
-        best_band = max(bands, key=lambda band: band[1] - band[0])
+            # Trouver la plus grande bande continue
+            bands = []
+            start = rows[0]
+            for i in range(1, len(rows)):
+                if rows[i] > rows[i - 1] + 5:
+                    bands.append((start, rows[i - 1]))
+                    start = rows[i]
+            bands.append((start, rows[-1]))
 
-        # On élargit un peu la bande pour être robuste (optionnel)
-        margin = 10
-        y0 = max(0, best_band[0] - margin)
-        y1 = min(gray.shape[0], best_band[1] + margin)
-        return y0, y1
+            # Prendre la bande la plus haute
+            best_band = max(bands, key=lambda band: band[1] - band[0])
+
+            # On élargit un peu la bande pour être robuste (optionnel)
+            margin = 10
+            y0 = max(0, best_band[0] - margin)
+            y1 = min(gray.shape[0], best_band[1] + margin)
+            return y0, y1
+
+        finally:
+            # Libération explicite de toutes les matrices temporaires
+            if bw is not None:
+                del bw
+            if kernel is not None:
+                del kernel
+            if proj is not None:
+                del proj
