@@ -32,10 +32,12 @@ class DossierFacileDatabaseService:
                 "host": os.getenv("DB_HOST"),
                 "port": os.getenv("DB_PORT")
             }
-            # Créer un pool de connexions thread-safe
+            # Pool optimisé pour 4 threads + marge de sécurité
+            # minconn=2 : Toujours 2 connexions prêtes
+            # maxconn=8 : Permet pics de charge et retry logic
             self.__connection_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=1,
-                maxconn=10,  # Ajustez selon vos besoins
+                minconn=2,  # Connexions persistantes pour réactivité
+                maxconn=8,  # Double des threads + marge pour retry/erreurs
                 **db_config
             )
             self._initialized = True
