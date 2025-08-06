@@ -1,8 +1,10 @@
 import logging
 import os
+import queue
+from logging.handlers import QueueHandler, QueueListener
+
 
 import elasticapm
-
 from elasticapm.handlers.logging import LoggingHandler
 
 from dossierfacile_file_analysis.custom_logging.json_formatter import JsonFormatter
@@ -26,6 +28,8 @@ else:
 
 # --- Setup unique logger ---
 logger = logging.getLogger("FileAnalysisLogger")
+log_queue = queue.Queue(-1)  # -1 = taille illimitée
+
 if not logger.hasHandlers():  # Assure qu’on le configure une seule fois
     logger.setLevel(logging.INFO)
 
@@ -33,7 +37,6 @@ if not logger.hasHandlers():  # Assure qu’on le configure une seule fois
     apm_handler = LoggingHandler(client=client)
     apm_handler.setLevel(logging.ERROR)
 
-    # TCP Logstash pour INFO+
     tcp_handler = TCPLogHandler(host=os.getenv("LOGSTASH_HOST"), port=os.getenv("LOGSTASH_PORT"))
     tcp_handler.setLevel(logging.INFO)
 
@@ -42,8 +45,13 @@ if not logger.hasHandlers():  # Assure qu’on le configure une seule fois
     tcp_handler.setFormatter(json_formatter)
 
     console_handler = logging.StreamHandler()
-    console_handler.setFormatter(json_formatter)
+    console_handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] [%(threadName)s] %(message)s"))
 
+    queue_handler = QueueHandler(log_queue)
+
+    logger.addHandler(queue_handler)
     logger.addHandler(apm_handler)
-    logger.addHandler(tcp_handler)
     logger.addHandler(console_handler)
+
+    listener = QueueListener(log_queue, tcp_handler, respect_handler_level=True)
+    listener.start()

@@ -36,8 +36,8 @@ class DossierFacileDatabaseService:
             # minconn=2 : Toujours 2 connexions prêtes
             # maxconn=8 : Permet pics de charge et retry logic
             self.__connection_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=2,  # Connexions persistantes pour réactivité
-                maxconn=8,  # Double des threads + marge pour retry/erreurs
+                minconn=4,  # Connexions persistantes pour réactivité
+                maxconn=10,  # Double des threads + marge pour retry/erreurs
                 **db_config
             )
             self._initialized = True
@@ -52,7 +52,7 @@ class DossierFacileDatabaseService:
 
     def get_file_by_id(self, file_id):
         start_time = time.time()
-        logger.info("Retrieving file by ID from the database")
+        logger.info(f"🔍 Retrieving file by ID from database for file_id: {file_id}")
 
         conn = None
         cursor = None
@@ -81,14 +81,14 @@ class DossierFacileDatabaseService:
                 column_names = [desc[0] for desc in cursor.description]
                 file_data_dict = dict(zip(column_names, file_data))
                 end_time = time.time()
-                logger.info(f"Database read take : {end_time - start_time:.2f} seconds")
+                logger.debug(f"✅ Database read completed in {end_time - start_time:.2f} seconds for file_id: {file_id}")
                 return FileDto(**file_data_dict)
             else:
-                logger.error(f"No file found with file_id {file_id}")
+                logger.error(f"❌ No file found with file_id {file_id}")
                 return None
 
         except Exception as e:
-            logger.error(f"Error retrieving file {file_id}: {e}")
+            logger.error(f"❌ Error retrieving file {file_id}: {e}")
             if conn:
                 conn.rollback()
             raise
@@ -149,3 +149,5 @@ class DossierFacileDatabaseService:
         """Fermer toutes les connexions du pool (à appeler à l'arrêt de l'application)"""
         if hasattr(self, '__connection_pool'):
             self.__connection_pool.closeall()
+
+database_service = DossierFacileDatabaseService()

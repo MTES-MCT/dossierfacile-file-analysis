@@ -1,4 +1,5 @@
 import json
+
 import elasticapm
 
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
@@ -6,14 +7,13 @@ from dossierfacile_file_analysis.exceptions.invalid_message_body_format import I
 from dossierfacile_file_analysis.exceptions.retryable_exception import RetryableException
 from dossierfacile_file_analysis.executor.blurry_executor import BlurryExecutor
 from dossierfacile_file_analysis.models.blurry_queue_message import BlurryQueueMessage
-from dossierfacile_file_analysis.services.dossier_facile_database_service import DossierFacileDatabaseService
+from dossierfacile_file_analysis.services.dossier_facile_database_service import database_service
 
 
 class BlurryMessageProcessor:
 
     @staticmethod
     def process(body, retry_count: int):
-        database_service = DossierFacileDatabaseService()
         client = elasticapm.get_client()
         client.begin_transaction("task")
         decoded_body = body.decode()
@@ -41,5 +41,8 @@ class BlurryMessageProcessor:
             # If the exception is not retryable we save in database the failed analysis
             # or if exception is retryable and the retry count is greater than 3 we save the failed analysis
             if not isinstance(e, RetryableException) or (isinstance(e, RetryableException) and retry_count >= 3):
-                database_service.save_failed_analysis(blurry_queue_message.file_id)
+                try:
+                    database_service.save_failed_analysis(blurry_queue_message.file_id)
+                except Exception as save_error:
+                    logger.error(f"Failed to save failed analysis: {save_error}")
             raise e

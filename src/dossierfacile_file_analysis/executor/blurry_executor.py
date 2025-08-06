@@ -34,11 +34,13 @@ class BlurryExecutor:
         try:
             for task in self.blurry_tasks:
                 if task.has_to_apply(self.blurry_execution_context):
+                    logger.debug("Start task: %s for file_id: %s", task.task_name, self.blurry_execution_context.file_id)
                     task.run(self.blurry_execution_context)
+                    logger.debug("Completed task: %s for file_id: %s", task.task_name, self.blurry_execution_context.file_id)
                 else:
                     logger.info(f"Skipping task: {task.task_name} for file_id: {self.blurry_execution_context.file_id}")
             logger.info(
-                f"Blurry file analysis completed for file_id: {self.blurry_execution_context.file_id} with execution_id: {self.blurry_execution_context.execution_id}"
+                f"✅ Blurry file analysis completed for file_id: {self.blurry_execution_context.file_id} with execution_id: {self.blurry_execution_context.execution_id}"
             )
             logger.info(
                 f"Blurry result: {self.blurry_execution_context.blurry_result if self.blurry_execution_context.blurry_result else 'No result'}"
@@ -50,4 +52,3 @@ class BlurryExecutor:
                 self.cleanTask.run(self.blurry_execution_context)
             else:
                 logger.info("No clean task defined, skipping cleanup.")
-

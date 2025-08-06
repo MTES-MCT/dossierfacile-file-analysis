@@ -1,15 +1,14 @@
 import os
 import time
-
 from concurrent.futures.thread import ThreadPoolExecutor
-from dossierfacile_file_analysis.custom_logging.logging_config import logger
 
 import pika
 from pika.exceptions import AMQPConnectionError
 
+from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.exceptions.retryable_exception import RetryableException
 from dossierfacile_file_analysis.services.blurry_message_processor import BlurryMessageProcessor
-from dossierfacile_file_analysis.services.dossier_facile_database_service import DossierFacileDatabaseService
+from dossierfacile_file_analysis.services.dossier_facile_database_service import database_service
 
 
 class AmqpService:
@@ -22,7 +21,6 @@ class AmqpService:
         self.executor = None
         self.connection = None
         self.channel = None
-        self.database_service = DossierFacileDatabaseService()
 
     def _connect(self):
         """Establishes a connection to the RabbitMQ server."""
@@ -49,14 +47,15 @@ class AmqpService:
 
     def _message_callback(self, channel, method_frame, properties, body):
         delivery_tag = method_frame.delivery_tag
-        logger.info(f"📥 Received message from queue '{self.queue_name}': {body.decode()}; delivery_tag={delivery_tag}; header_frame={properties}")
+        logger.info(
+            f"📥 Received message from queue '{self.queue_name}': {body.decode()}; delivery_tag={delivery_tag}; header_frame={properties}")
 
         def _ack():
             channel.basic_ack(delivery_tag=delivery_tag)
 
         def _retry_message():
-            retry_delay_ms = 3000  # 3 secondes
-            retry_queue = f"{self.queue_name}_retry"
+            retry_delay_ms = 5000  # 5 secondes
+            retry_queue = f"{self.queue_name}_retry_5s"
             # Déclare la file de retry avec TTL et DLX
             channel.queue_declare(
                 queue=retry_queue,
@@ -123,5 +122,5 @@ class AmqpService:
         """Closes the connection to RabbitMQ."""
         if self.connection and not self.connection.is_closed:
             self.connection.close()
-            self.database_service.close_all_connections()
+            database_service.close_all_connections()
             logger.info("🔌 Connection to RabbitMQ closed.")
