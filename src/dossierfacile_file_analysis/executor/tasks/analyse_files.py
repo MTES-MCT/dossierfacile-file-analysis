@@ -16,7 +16,7 @@ class AnalyseFiles(AbstractBlurryTask):
     def __init__(self):
         super().__init__(task_name="AnalyseFiles")
         self.laplacian_variance_threshold = 250
-        self.mean_gray_threshold = 245
+        self.mean_gray_threshold = 350
         self.proj_threshold = 0.6
         self.average_confidence_threshold = 40
 
