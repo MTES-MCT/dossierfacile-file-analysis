@@ -9,6 +9,7 @@ from psycopg2 import pool
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.data.file_dto import FileDto
 from dossierfacile_file_analysis.models.blurry_result import BlurryResult
+from dossierfacile_file_analysis.services.arg_provider_service import arg_provider_service
 
 
 class DossierFacileDatabaseService:
@@ -35,9 +36,10 @@ class DossierFacileDatabaseService:
             # Pool optimisé pour 4 threads + marge de sécurité
             # minconn=2 : Toujours 2 connexions prêtes
             # maxconn=8 : Permet pics de charge et retry logic
+            thread_number = arg_provider_service.get_thread_number()
             self.__connection_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=4,  # Connexions persistantes pour réactivité
-                maxconn=10,  # Double des threads + marge pour retry/erreurs
+                minconn=thread_number,  # Connexions persistantes pour réactivité
+                maxconn=(thread_number*2 + 2),  # Double des threads + marge pour retry/erreurs
                 **db_config
             )
             self._initialized = True

@@ -7,6 +7,7 @@ from pika.exceptions import AMQPConnectionError
 
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.exceptions.retryable_exception import RetryableException
+from dossierfacile_file_analysis.services.arg_provider_service import arg_provider_service
 from dossierfacile_file_analysis.services.blurry_message_processor import BlurryMessageProcessor
 from dossierfacile_file_analysis.services.dossier_facile_database_service import database_service
 
@@ -99,12 +100,13 @@ class AmqpService:
     def start_listening(self):
         """Starts listening for messages on the configured queue."""
         self._connect()
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        thread_number = arg_provider_service.get_thread_number()
+        self.executor = ThreadPoolExecutor(max_workers=thread_number)
 
         # Configure prefetch pour optimiser la distribution entre hosts et threads
         # prefetch_count=4 permet à chaque host de traiter 4 messages simultanément
         # tout en évitant qu'un même message soit traité par plusieurs hosts
-        self.channel.basic_qos(prefetch_count=4)  # 1 message par thread maximum
+        self.channel.basic_qos(prefetch_count=thread_number)  # 1 message par thread maximum
 
         self.channel.basic_consume(
             queue=self.queue_name,
@@ -112,7 +114,7 @@ class AmqpService:
             auto_ack=False  # Manual acknowledgment - CRITIQUE pour éviter la duplication
         )
 
-        logger.info(f"👂 Listening for messages on queue '{self.queue_name}' with {4} workers per host")
+        logger.info(f"👂 Listening for messages on queue '{self.queue_name}' with {thread_number} workers per host")
         try:
             self.channel.start_consuming()
         except KeyboardInterrupt:
