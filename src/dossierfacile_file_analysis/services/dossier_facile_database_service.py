@@ -107,11 +107,11 @@ class DossierFacileDatabaseService:
             conn = self._get_connection()
             cursor = conn.cursor()
             query = (
-                "INSERT INTO blurry_file_analysis (file_id, blurry_results, analysis_status) "
-                "VALUES (%s, %s, %s)"
+                "INSERT INTO blurry_file_analysis (file_id, blurry_results, analysis_status, data_file_id) "
+                "VALUES (%s, %s, %s, %s)"
             )
             blurry_results_json = json.dumps(blurry_result.to_dict())
-            cursor.execute(query, (file_id, blurry_results_json, "COMPLETED"))
+            cursor.execute(query, (file_id, blurry_results_json, "COMPLETED", file_id))
             conn.commit()
         except Exception as e:
             logger.error(f"Failed to save blurry result for file_id {file_id}: {e}")
@@ -131,10 +131,10 @@ class DossierFacileDatabaseService:
             conn = self._get_connection()
             cursor = conn.cursor()
             query = (
-                "INSERT INTO blurry_file_analysis (file_id, analysis_status) "
-                "VALUES (%s, %s)"
+                "INSERT INTO blurry_file_analysis (file_id, analysis_status, data_file_id) "
+                "VALUES (%s, %s, %s)"
             )
-            cursor.execute(query, (file_id, "FAILED"))
+            cursor.execute(query, (file_id, "FAILED", file_id))
             conn.commit()
         except Exception as e:
             logger.error(f"Failed to save failed analysis for file_id {file_id}: {e}")
