@@ -16,10 +16,13 @@ class PrepareDataForAnalysis(AbstractBlurryTask):
     def __init__(self):
         super().__init__(task_name="PrepareDataForAnalysis")
         self.local_file_path = os.getenv("LOCAL_FILE_PATH")
-        self.targeted_dpi = 220
-        self.max_long_edge = 2500 # in pixels
-        self.max_pixel_size = 4_000_000
-        self.min_long_edge = 1500 # in pixels
+        # Valeurs par défaut plus basses pour accélérer Tesseract tout en gardant une qualité OCR correcte
+        self.targeted_dpi = int(os.getenv("TARGETED_DPI", 180))
+        self.max_long_edge = int(os.getenv("MAX_LONG_EDGE", 1800))  # en pixels
+        self.max_pixel_size = int(os.getenv("MAX_PIXEL_SIZE", 2_000_000))
+        self.min_long_edge = int(os.getenv("MIN_LONG_EDGE", 1500))  # en pixels
+        # Permettre de forcer la sortie en niveaux de gris
+        self.force_grayscale = os.getenv("FORCE_GRAYSCALE", "1").lower() in ("1", "true", "yes")
 
     def has_to_apply(self, context: BlurryExecutionContext) -> bool:
         if context.file_dto is None and context.downloaded_file is None:
@@ -46,26 +49,31 @@ class PrepareDataForAnalysis(AbstractBlurryTask):
                 page_width = page.rect.width
                 page_height = page.rect.height
 
-                # Targeted zoom for 300 DPI
+                # Zoom cible basé sur le DPI souhaité
                 zoom = self.targeted_dpi / 72.0
 
-                # Predicted size at 300 dpi
+                # Taille prédite avec ce zoom
                 predicted_width = page_width * zoom
                 predicted_height = page_height * zoom
 
-                # We clamp the size to ensure it does not exceed the maximum pixel size
-                scale_by_dge = self.max_long_edge / max(predicted_width, predicted_height)
+                # On borne par la longueur max et le nombre total de pixels
+                scale_by_edge = self.max_long_edge / max(predicted_width, predicted_height)
                 scale_by_mp = math.sqrt(self.max_pixel_size / (predicted_width * predicted_height))
-                clamp_factor = min(1.0, scale_by_dge, scale_by_mp)
+                clamp_factor = min(1.0, scale_by_edge, scale_by_mp)
 
-                # If the picture is too small
+                # Si trop petit, on remonte au minimum requis
                 if clamp_factor == 1.0 and max(predicted_width, predicted_height) < self.min_long_edge:
                     clamp_factor = self.min_long_edge / max(predicted_width, predicted_height)
 
                 effective_zoom = zoom * clamp_factor
                 mat = pymupdf.Matrix(effective_zoom, effective_zoom)
 
-                pix = page.get_pixmap(matrix=mat)
+                # Préparation des kwargs pour get_pixmap (niveau de gris + pas d’alpha)
+                kwargs = {"matrix": mat, "alpha": False}
+                if self.force_grayscale and hasattr(pymupdf, "csGRAY"):
+                    kwargs["colorspace"] = pymupdf.csGRAY
+
+                pix = page.get_pixmap(**kwargs)
                 try:
                     logger.debug(
                         f"Page {page.number}: pts={int(predicted_width)}x{int(predicted_height)} -> "

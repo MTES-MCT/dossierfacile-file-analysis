@@ -19,6 +19,10 @@ class AnalyseFiles(AbstractBlurryTask):
         self.mean_gray_threshold = 350
         self.proj_threshold = 0.6
         self.average_confidence_threshold = 40
+        self.tesseract_psm = 11
+        self.tesseract_oem = 1
+        self.tesseract_config = f"--psm {self.tesseract_psm} --oem {self.tesseract_oem}"
+        self.tesseract_lang = "fra"
 
     def has_to_apply(self, context: BlurryExecutionContext) -> bool:
         if context.file_dto is None and context.downloaded_file is None and context.input_analysis_data is None:
@@ -71,7 +75,7 @@ class AnalyseFiles(AbstractBlurryTask):
         data = None
         start_time = time.time()
         try:
-            data = image_to_data(gray, output_type='dict')
+            data = image_to_data(gray, output_type='dict', config=self.tesseract_config, lang=self.tesseract_lang)
             confidences = [int(conf) for conf in data['conf'] if conf != '-1']
             if confidences:
                 avg_conf = sum(confidences) / len(confidences)

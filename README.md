@@ -61,3 +61,25 @@ Then, you can run the tests using `pytest`:
 ```bash
 poetry run pytest
 ```
+
+## TESSERACT OCR : 
+This project uses Tesseract OCR for text recognition in images. To install Tesseract on your system, follow the instructions below based on your operating system:
+- **Ubuntu/Debian**:
+  ```bash
+  sudo apt-get install tesseract-ocr
+  ```
+- **macOS** (using Homebrew):
+  ```bash
+  brew install tesseract
+  ```
+  
+The configuration of Tesseract use fra language by default. You need to install it from here : 
+`https://github.com/tesseract-ocr/tessdata_fast/raw/main/fra.traineddata`
+and put it inside your tesseract tessdata folder.
+
+For Scalingo, we use a specific bash script to install the fra language during the startup.
+`/bin/start_worker.sh`
+
+Configuration : 
+    - Tesseract OEM (OCR Engine Mode) : 1 (LSTM only), This mode is more accurate for most cases and faster.
+    - PSM (Page Segmentation Mode) : 11 (Sparse text with OSD), This mode is suitable for images with sparse text and automatically detects the orientation and script of the text.
