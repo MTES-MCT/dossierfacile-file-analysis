@@ -7,6 +7,7 @@ from pika.exceptions import AMQPConnectionError
 
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.exceptions.retryable_exception import RetryableException
+from dossierfacile_file_analysis.exceptions.duplicate_key_exception import DuplicateKeyException
 from dossierfacile_file_analysis.services.arg_provider_service import arg_provider_service
 from dossierfacile_file_analysis.services.blurry_message_processor import BlurryMessageProcessor
 from dossierfacile_file_analysis.services.dossier_facile_database_service import database_service
@@ -80,6 +81,9 @@ class AmqpService:
         def _on_done(future):
             try:
                 future.result()
+            except DuplicateKeyException as e:
+                logger.info(f"ℹ️ Analysis already exists for file_id {e.file_id}, acknowledging message without retry")
+                # Pas de retry pour les erreurs de contrainte d'unicité
             except RetryableException as e:
                 logger.warning(f"⚠️ Error processing message: {e}")
                 retry_count = properties.headers.get('x-retry-count', 0)

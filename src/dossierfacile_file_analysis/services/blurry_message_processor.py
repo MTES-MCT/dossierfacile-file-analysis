@@ -5,6 +5,7 @@ import elasticapm
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.exceptions.invalid_message_body_format import InvalidMessageBodyFormat
 from dossierfacile_file_analysis.exceptions.retryable_exception import RetryableException
+from dossierfacile_file_analysis.exceptions.duplicate_key_exception import DuplicateKeyException
 from dossierfacile_file_analysis.executor.blurry_executor import BlurryExecutor
 from dossierfacile_file_analysis.models.blurry_queue_message import BlurryQueueMessage
 from dossierfacile_file_analysis.services.dossier_facile_database_service import database_service
@@ -35,6 +36,12 @@ class BlurryMessageProcessor:
 
             client.end_transaction("message_processing", "success")
             return True
+        except DuplicateKeyException as e:
+            client.capture_exception()
+            client.end_transaction("message_processing", "failure")
+            logger.info(f"ℹ️ Analysis already exists for file_id {e.file_id}, skipping processing")
+            # Ne pas sauvegarder d'analyse échouée car l'analyse existe déjà
+            raise e
         except Exception as e:
             client.capture_exception()
             client.end_transaction("message_processing", "failure")

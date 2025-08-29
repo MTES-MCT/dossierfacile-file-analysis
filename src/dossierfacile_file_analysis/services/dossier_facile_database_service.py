@@ -5,11 +5,13 @@ import json
 
 import psycopg2
 from psycopg2 import pool
+from psycopg2.errors import UniqueViolation
 
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.data.file_dto import FileDto
 from dossierfacile_file_analysis.models.blurry_result import BlurryResult
 from dossierfacile_file_analysis.services.arg_provider_service import arg_provider_service
+from dossierfacile_file_analysis.exceptions.duplicate_key_exception import DuplicateKeyException
 
 
 class DossierFacileDatabaseService:
@@ -113,8 +115,14 @@ class DossierFacileDatabaseService:
             blurry_results_json = json.dumps(blurry_result.to_dict())
             cursor.execute(query, (file_id, blurry_results_json, "COMPLETED", file_id))
             conn.commit()
+            logger.info(f"✅ Successfully saved blurry result for file_id {file_id}")
+        except UniqueViolation as e:
+            logger.warning(f"⚠️ Duplicate key constraint violation for file_id {file_id}: analysis already exists")
+            if conn:
+                conn.rollback()
+            raise DuplicateKeyException(f"Analysis already exists for file_id {file_id}", file_id)
         except Exception as e:
-            logger.error(f"Failed to save blurry result for file_id {file_id}: {e}")
+            logger.error(f"❌ Failed to save blurry result for file_id {file_id}: {e}")
             if conn:
                 conn.rollback()
             raise
@@ -136,8 +144,14 @@ class DossierFacileDatabaseService:
             )
             cursor.execute(query, (file_id, "FAILED", file_id))
             conn.commit()
+            logger.info(f"✅ Successfully saved failed analysis for file_id {file_id}")
+        except UniqueViolation as e:
+            logger.warning(f"⚠️ Duplicate key constraint violation for file_id {file_id}: failed analysis already exists")
+            if conn:
+                conn.rollback()
+            raise DuplicateKeyException(f"Failed analysis already exists for file_id {file_id}", file_id)
         except Exception as e:
-            logger.error(f"Failed to save failed analysis for file_id {file_id}: {e}")
+            logger.error(f"❌ Failed to save failed analysis for file_id {file_id}: {e}")
             if conn:
                 conn.rollback()
             raise
