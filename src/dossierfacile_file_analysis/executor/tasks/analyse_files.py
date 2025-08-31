@@ -1,10 +1,14 @@
 import time
 
+import os
+
+
 from pytesseract import image_to_data
 import cv2
 import numpy as np
 
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
+
 from dossierfacile_file_analysis.executor.tasks.abstract_blurry_task import AbstractBlurryTask
 from dossierfacile_file_analysis.models.blurry_execution_context import BlurryExecutionContext
 from dossierfacile_file_analysis.models.blurry_result import BlurryResult
@@ -23,6 +27,8 @@ class AnalyseFiles(AbstractBlurryTask):
         self.tesseract_oem = 1
         self.tesseract_config = f"--psm {self.tesseract_psm} --oem {self.tesseract_oem}"
         self.tesseract_lang = "fra"
+        self.tesseract_timeout = int(os.getenv('TESSERACT_TIMEOUT', '60'))
+        
 
     def has_to_apply(self, context: BlurryExecutionContext) -> bool:
         if context.file_dto is None and context.downloaded_file is None and context.input_analysis_data is None:
@@ -75,13 +81,20 @@ class AnalyseFiles(AbstractBlurryTask):
         data = None
         start_time = time.time()
         try:
-            data = image_to_data(gray, output_type='dict', config=self.tesseract_config, lang=self.tesseract_lang)
+            # Use built-in timeout parameter from pytesseract
+            data = image_to_data(gray, output_type='dict', config=self.tesseract_config, lang=self.tesseract_lang, timeout=self.tesseract_timeout)
             confidences = [int(conf) for conf in data['conf'] if conf != '-1']
             if confidences:
                 avg_conf = sum(confidences) / len(confidences)
             else:
                 avg_conf = 0
             return avg_conf > self.average_confidence_threshold
+        except RuntimeError as e:
+            logger.warning(f"Tesseract OCR timeout or error: {e} - treating as unreadable")
+            return False
+        except Exception as e:
+            logger.error(f"Tesseract OCR error: {e} - treating as unreadable")
+            return False
         finally:
             # Libérer les données Tesseract qui peuvent être volumineuses
             if data is not None:
