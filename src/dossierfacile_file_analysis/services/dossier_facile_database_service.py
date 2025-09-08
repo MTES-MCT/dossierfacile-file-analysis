@@ -67,6 +67,7 @@ class DossierFacileDatabaseService:
             # Requête SQL pour récupérer les données du fichier
             query = "SELECT " \
                     "f.id as id, " \
+                    "f.document_id as document_id, " \
                     "sf.path as path, " \
                     "sf.content_type as content_type, " \
                     "ek.encoded as encryption_key, " \
@@ -102,18 +103,18 @@ class DossierFacileDatabaseService:
             if conn:
                 self._put_connection(conn)
 
-    def save_blurry_result(self, file_id: int, blurry_result: BlurryResult):
+    def save_blurry_result(self, file_id: int, document_id: int, blurry_result: BlurryResult):
         conn = None
         cursor = None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
             query = (
-                "INSERT INTO blurry_file_analysis (file_id, blurry_results, analysis_status, data_file_id) "
-                "VALUES (%s, %s, %s, %s)"
+                "INSERT INTO blurry_file_analysis (file_id, blurry_results, analysis_status, data_file_id, data_document_id) "
+                "VALUES (%s, %s, %s, %s, %s)"
             )
             blurry_results_json = json.dumps(blurry_result.to_dict())
-            cursor.execute(query, (file_id, blurry_results_json, "COMPLETED", file_id))
+            cursor.execute(query, (file_id, blurry_results_json, "COMPLETED", file_id, document_id))
             conn.commit()
             logger.info(f"✅ Successfully saved blurry result for file_id {file_id}")
         except UniqueViolation as e:
@@ -139,10 +140,10 @@ class DossierFacileDatabaseService:
             conn = self._get_connection()
             cursor = conn.cursor()
             query = (
-                "INSERT INTO blurry_file_analysis (file_id, analysis_status, data_file_id) "
-                "VALUES (%s, %s, %s)"
+                "INSERT INTO blurry_file_analysis (file_id, analysis_status, data_file_id, data_document_id) "
+                "SELECT %s, %s, %s, f.document_id FROM file f WHERE f.id = %s"
             )
-            cursor.execute(query, (file_id, "FAILED", file_id))
+            cursor.execute(query, (file_id, "FAILED", file_id, file_id))
             conn.commit()
             logger.info(f"✅ Successfully saved failed analysis for file_id {file_id}")
         except UniqueViolation as e:

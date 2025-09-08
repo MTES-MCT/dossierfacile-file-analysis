@@ -16,4 +16,5 @@ class SaveBlurryResultToDB(AbstractBlurryTask):
         database_service.save_blurry_result(
             file_id=context.file_dto.id,
             blurry_result=context.blurry_result,
+            document_id=context.file_dto.document_id
         )
