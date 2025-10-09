@@ -1,15 +1,16 @@
 import os
 import time
-
 from concurrent.futures.thread import ThreadPoolExecutor
-from dossierfacile_file_analysis.custom_logging.logging_config import logger
 
 import pika
 from pika.exceptions import AMQPConnectionError
 
+from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.exceptions.retryable_exception import RetryableException
+from dossierfacile_file_analysis.exceptions.duplicate_key_exception import DuplicateKeyException
+from dossierfacile_file_analysis.services.arg_provider_service import arg_provider_service
 from dossierfacile_file_analysis.services.blurry_message_processor import BlurryMessageProcessor
-from dossierfacile_file_analysis.services.dossier_facile_database_service import DossierFacileDatabaseService
+from dossierfacile_file_analysis.services.dossier_facile_database_service import database_service
 
 
 class AmqpService:
@@ -22,7 +23,6 @@ class AmqpService:
         self.executor = None
         self.connection = None
         self.channel = None
-        self.database_service = DossierFacileDatabaseService()
 
     def _connect(self):
         """Establishes a connection to the RabbitMQ server."""
@@ -49,14 +49,15 @@ class AmqpService:
 
     def _message_callback(self, channel, method_frame, properties, body):
         delivery_tag = method_frame.delivery_tag
-        logger.info(f"📥 Received message from queue '{self.queue_name}': {body.decode()}; delivery_tag={delivery_tag}; header_frame={properties}")
+        logger.info(
+            f"📥 Received message from queue '{self.queue_name}': {body.decode()}; delivery_tag={delivery_tag}; header_frame={properties}")
 
         def _ack():
             channel.basic_ack(delivery_tag=delivery_tag)
 
         def _retry_message():
-            retry_delay_ms = 3000  # 3 secondes
-            retry_queue = f"{self.queue_name}_retry"
+            retry_delay_ms = 5000  # 5 secondes
+            retry_queue = f"{self.queue_name}_retry_5s"
             # Déclare la file de retry avec TTL et DLX
             channel.queue_declare(
                 queue=retry_queue,
@@ -80,6 +81,9 @@ class AmqpService:
         def _on_done(future):
             try:
                 future.result()
+            except DuplicateKeyException as e:
+                logger.info(f"ℹ️ Analysis already exists for file_id {e.file_id}, acknowledging message without retry")
+                # Pas de retry pour les erreurs de contrainte d'unicité
             except RetryableException as e:
                 logger.warning(f"⚠️ Error processing message: {e}")
                 retry_count = properties.headers.get('x-retry-count', 0)
@@ -100,12 +104,13 @@ class AmqpService:
     def start_listening(self):
         """Starts listening for messages on the configured queue."""
         self._connect()
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        thread_number = arg_provider_service.get_thread_number()
+        self.executor = ThreadPoolExecutor(max_workers=thread_number)
 
         # Configure prefetch pour optimiser la distribution entre hosts et threads
         # prefetch_count=4 permet à chaque host de traiter 4 messages simultanément
         # tout en évitant qu'un même message soit traité par plusieurs hosts
-        self.channel.basic_qos(prefetch_count=4)  # 1 message par thread maximum
+        self.channel.basic_qos(prefetch_count=thread_number)  # 1 message par thread maximum
 
         self.channel.basic_consume(
             queue=self.queue_name,
@@ -113,7 +118,7 @@ class AmqpService:
             auto_ack=False  # Manual acknowledgment - CRITIQUE pour éviter la duplication
         )
 
-        logger.info(f"👂 Listening for messages on queue '{self.queue_name}' with {4} workers per host")
+        logger.info(f"👂 Listening for messages on queue '{self.queue_name}' with {thread_number} workers per host")
         try:
             self.channel.start_consuming()
         except KeyboardInterrupt:
@@ -123,5 +128,5 @@ class AmqpService:
         """Closes the connection to RabbitMQ."""
         if self.connection and not self.connection.is_closed:
             self.connection.close()
-            self.database_service.close_all_connections()
+            database_service.close_all_connections()
             logger.info("🔌 Connection to RabbitMQ closed.")

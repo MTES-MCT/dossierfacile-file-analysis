@@ -5,10 +5,13 @@ import json
 
 import psycopg2
 from psycopg2 import pool
+from psycopg2.errors import UniqueViolation
 
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.data.file_dto import FileDto
 from dossierfacile_file_analysis.models.blurry_result import BlurryResult
+from dossierfacile_file_analysis.services.arg_provider_service import arg_provider_service
+from dossierfacile_file_analysis.exceptions.duplicate_key_exception import DuplicateKeyException
 
 
 class DossierFacileDatabaseService:
@@ -35,9 +38,10 @@ class DossierFacileDatabaseService:
             # Pool optimisé pour 4 threads + marge de sécurité
             # minconn=2 : Toujours 2 connexions prêtes
             # maxconn=8 : Permet pics de charge et retry logic
+            thread_number = arg_provider_service.get_thread_number()
             self.__connection_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=2,  # Connexions persistantes pour réactivité
-                maxconn=8,  # Double des threads + marge pour retry/erreurs
+                minconn=thread_number,  # Connexions persistantes pour réactivité
+                maxconn=(thread_number*2 + 2),  # Double des threads + marge pour retry/erreurs
                 **db_config
             )
             self._initialized = True
@@ -52,7 +56,7 @@ class DossierFacileDatabaseService:
 
     def get_file_by_id(self, file_id):
         start_time = time.time()
-        logger.info("Retrieving file by ID from the database")
+        logger.info(f"🔍 Retrieving file by ID from database for file_id: {file_id}")
 
         conn = None
         cursor = None
@@ -63,6 +67,7 @@ class DossierFacileDatabaseService:
             # Requête SQL pour récupérer les données du fichier
             query = "SELECT " \
                     "f.id as id, " \
+                    "f.document_id as document_id, " \
                     "sf.path as path, " \
                     "sf.content_type as content_type, " \
                     "ek.encoded as encryption_key, " \
@@ -81,14 +86,14 @@ class DossierFacileDatabaseService:
                 column_names = [desc[0] for desc in cursor.description]
                 file_data_dict = dict(zip(column_names, file_data))
                 end_time = time.time()
-                logger.info(f"Database read take : {end_time - start_time:.2f} seconds")
+                logger.debug(f"✅ Database read completed in {end_time - start_time:.2f} seconds for file_id: {file_id}")
                 return FileDto(**file_data_dict)
             else:
-                logger.error(f"No file found with file_id {file_id}")
+                logger.error(f"❌ No file found with file_id {file_id}")
                 return None
 
         except Exception as e:
-            logger.error(f"Error retrieving file {file_id}: {e}")
+            logger.error(f"❌ Error retrieving file {file_id}: {e}")
             if conn:
                 conn.rollback()
             raise
@@ -98,21 +103,27 @@ class DossierFacileDatabaseService:
             if conn:
                 self._put_connection(conn)
 
-    def save_blurry_result(self, file_id: int, blurry_result: BlurryResult):
+    def save_blurry_result(self, file_id: int, document_id: int, blurry_result: BlurryResult):
         conn = None
         cursor = None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
             query = (
-                "INSERT INTO blurry_file_analysis (file_id, blurry_results, analysis_status) "
-                "VALUES (%s, %s, %s)"
+                "INSERT INTO blurry_file_analysis (file_id, blurry_results, analysis_status, data_file_id, data_document_id) "
+                "VALUES (%s, %s, %s, %s, %s)"
             )
             blurry_results_json = json.dumps(blurry_result.to_dict())
-            cursor.execute(query, (file_id, blurry_results_json, "COMPLETED"))
+            cursor.execute(query, (file_id, blurry_results_json, "COMPLETED", file_id, document_id))
             conn.commit()
+            logger.info(f"✅ Successfully saved blurry result for file_id {file_id}")
+        except UniqueViolation as e:
+            logger.warning(f"⚠️ Duplicate key constraint violation for file_id {file_id}: analysis already exists")
+            if conn:
+                conn.rollback()
+            raise DuplicateKeyException(f"Analysis already exists for file_id {file_id}", file_id)
         except Exception as e:
-            logger.error(f"Failed to save blurry result for file_id {file_id}: {e}")
+            logger.error(f"❌ Failed to save blurry result for file_id {file_id}: {e}")
             if conn:
                 conn.rollback()
             raise
@@ -129,13 +140,19 @@ class DossierFacileDatabaseService:
             conn = self._get_connection()
             cursor = conn.cursor()
             query = (
-                "INSERT INTO blurry_file_analysis (file_id, analysis_status) "
-                "VALUES (%s, %s)"
+                "INSERT INTO blurry_file_analysis (file_id, analysis_status, data_file_id, data_document_id) "
+                "SELECT %s, %s, %s, f.document_id FROM file f WHERE f.id = %s"
             )
-            cursor.execute(query, (file_id, "FAILED"))
+            cursor.execute(query, (file_id, "FAILED", file_id, file_id))
             conn.commit()
+            logger.info(f"✅ Successfully saved failed analysis for file_id {file_id}")
+        except UniqueViolation as e:
+            logger.warning(f"⚠️ Duplicate key constraint violation for file_id {file_id}: failed analysis already exists")
+            if conn:
+                conn.rollback()
+            raise DuplicateKeyException(f"Failed analysis already exists for file_id {file_id}", file_id)
         except Exception as e:
-            logger.error(f"Failed to save failed analysis for file_id {file_id}: {e}")
+            logger.error(f"❌ Failed to save failed analysis for file_id {file_id}: {e}")
             if conn:
                 conn.rollback()
             raise
@@ -149,3 +166,5 @@ class DossierFacileDatabaseService:
         """Fermer toutes les connexions du pool (à appeler à l'arrêt de l'application)"""
         if hasattr(self, '__connection_pool'):
             self.__connection_pool.closeall()
+
+database_service = DossierFacileDatabaseService()

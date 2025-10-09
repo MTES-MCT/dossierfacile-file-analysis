@@ -1,10 +1,14 @@
 import time
 
+import os
+
+
 from pytesseract import image_to_data
 import cv2
 import numpy as np
 
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
+
 from dossierfacile_file_analysis.executor.tasks.abstract_blurry_task import AbstractBlurryTask
 from dossierfacile_file_analysis.models.blurry_execution_context import BlurryExecutionContext
 from dossierfacile_file_analysis.models.blurry_result import BlurryResult
@@ -16,9 +20,15 @@ class AnalyseFiles(AbstractBlurryTask):
     def __init__(self):
         super().__init__(task_name="AnalyseFiles")
         self.laplacian_variance_threshold = 250
-        self.mean_gray_threshold = 245
+        self.mean_gray_threshold = 350
         self.proj_threshold = 0.6
         self.average_confidence_threshold = 40
+        self.tesseract_psm = 11
+        self.tesseract_oem = 1
+        self.tesseract_config = f"--psm {self.tesseract_psm} --oem {self.tesseract_oem}"
+        self.tesseract_lang = "fra"
+        self.tesseract_timeout = int(os.getenv('TESSERACT_TIMEOUT', '60'))
+        
 
     def has_to_apply(self, context: BlurryExecutionContext) -> bool:
         if context.file_dto is None and context.downloaded_file is None and context.input_analysis_data is None:
@@ -31,7 +41,11 @@ class AnalyseFiles(AbstractBlurryTask):
         if context.input_analysis_data.type == SupportedContentType.PDF:
             # Process each image in the list of images
             for image_path in context.input_analysis_data.list_of_images:
-                list_of_results.append(self._is_blurry(image_path))
+                result = self._is_blurry(image_path)
+                list_of_results.append(result)
+                # On sort de la boucle si jamais on trouve une image floue ou illisible
+                if result.is_blurry or (result.is_blurry == False and result.is_readable == False):
+                    break
         else:
             # Process the single image file
             list_of_results.append(self._is_blurry(context.input_analysis_data.initial_file))
@@ -57,7 +71,7 @@ class AnalyseFiles(AbstractBlurryTask):
             )
 
         try:
-            result = self._detect_blur_laplacian(gray, self.is_readable(gray))
+            result = self._detect_blur_laplacian(gray)
             return result
         finally:
             # Libérer explicitement la mémoire OpenCV
@@ -65,21 +79,31 @@ class AnalyseFiles(AbstractBlurryTask):
 
     def is_readable(self, gray) -> bool:
         data = None
+        start_time = time.time()
         try:
-            data = image_to_data(gray, output_type='dict')
+            # Use built-in timeout parameter from pytesseract
+            data = image_to_data(gray, output_type='dict', config=self.tesseract_config, lang=self.tesseract_lang, timeout=self.tesseract_timeout)
             confidences = [int(conf) for conf in data['conf'] if conf != '-1']
             if confidences:
                 avg_conf = sum(confidences) / len(confidences)
             else:
                 avg_conf = 0
             return avg_conf > self.average_confidence_threshold
+        except RuntimeError as e:
+            logger.warning(f"Tesseract OCR timeout or error: {e} - treating as unreadable")
+            return False
+        except Exception as e:
+            logger.error(f"Tesseract OCR error: {e} - treating as unreadable")
+            return False
         finally:
             # Libérer les données Tesseract qui peuvent être volumineuses
             if data is not None:
                 del data
+            end_time = time.time()
+            logger.info(f"Tesseract read took: {end_time - start_time:.2f} seconds")
 
 
-    def _detect_blur_laplacian(self, gray, is_readable: bool):
+    def _detect_blur_laplacian(self, gray):
         # Calculate variance of Laplacian
         start_time = time.time()
 
@@ -88,7 +112,7 @@ class AnalyseFiles(AbstractBlurryTask):
                 laplacian_variance=-1,
                 is_blurry=False,
                 is_blank=True,
-                is_readable=is_readable
+                is_readable=True
             )
 
         y0, y1 = self._extract_text_band(gray)
@@ -97,7 +121,7 @@ class AnalyseFiles(AbstractBlurryTask):
                 laplacian_variance=-1,
                 is_blurry=True,
                 is_blank=False,
-                is_readable=is_readable
+                is_readable=False,
             )
 
         # Créer la matrice Laplacienne et la libérer explicitement
@@ -115,7 +139,7 @@ class AnalyseFiles(AbstractBlurryTask):
             laplacian_variance=laplacian_var,
             is_blurry=laplacian_var < self.laplacian_variance_threshold,
             is_blank=False,
-            is_readable=is_readable
+            is_readable = self.is_readable(gray) if laplacian_var > self.laplacian_variance_threshold else False
         )
 
     def _extract_text_band(self, gray):

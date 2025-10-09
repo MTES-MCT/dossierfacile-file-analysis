@@ -1,1 +1,1 @@
-worker: python -u src/dossierfacile_file_analysis/main.py
+worker: ./bin/start_worker.sh

@@ -1,4 +1,6 @@
 import os
+import glob
+import tempfile
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -88,3 +90,47 @@ def test_run_other_file_type(prepare_data_task):
     mock_pymupdf_open.assert_not_called()
     assert isinstance(context.input_analysis_data, InputAnalysisData)
     assert context.input_analysis_data.list_of_images == []
+
+
+def test_real_pdf_conversion():
+    """Test real PDF conversion using files in tests/data/pdf"""
+    # Given
+    test_pdf_dir = os.path.join(os.path.dirname(__file__), "../../data/pdf")
+    pdf_files = glob.glob(os.path.join(test_pdf_dir, "*.pdf"))
+
+    if not pdf_files:
+        pytest.skip("No PDF files found in tests/data/pdf directory")
+
+    # Create temporary directory for output images
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with patch.dict(os.environ, {"LOCAL_FILE_PATH": temp_dir}):
+            task = PrepareDataForAnalysis()
+
+            for pdf_file in pdf_files:
+                print(f"\n🔍 Testing PDF file: {os.path.basename(pdf_file)}")
+
+                # When
+                context = BlurryExecutionContext(BlurryQueueMessage(file_id=1))
+                context.downloaded_file = DownloadedFile(
+                    file_name=os.path.basename(pdf_file).replace('.pdf', ''),
+                    file_path=pdf_file,
+                    file_type="application/pdf"
+                )
+
+                # Execute the conversion
+                task.run(context)
+
+                # Then - verify conversion was successful
+                assert context.input_analysis_data is not None
+                assert isinstance(context.input_analysis_data, InputAnalysisData)
+                assert hasattr(context.input_analysis_data, 'list_of_images')
+                assert len(context.input_analysis_data.list_of_images) > 0
+
+                # Verify images were actually created
+                for image_path in context.input_analysis_data.list_of_images:
+                    assert os.path.exists(image_path), f"Image not created: {image_path}"
+                    file_size = os.path.getsize(image_path)
+                    assert file_size > 0, f"Empty image file: {image_path}"
+                    print(f"  ✅ Generated image: {os.path.basename(image_path)} ({file_size / (1024 * 1024):.2f} MB)")
+
+                print(f"  📊 Total images generated: {len(context.input_analysis_data.list_of_images)}")
