@@ -1,18 +1,18 @@
 class BlurryResult:
 
-    def __init__(self, laplacian_variance: float, is_blurry: bool, is_blank: bool, is_readable: bool):
-        self.laplacian_variance = laplacian_variance
+    def __init__(self, is_blurry: bool, is_blank: bool, ocr_mean_score: float = 0, ocr_tokens: int = 0):
         self.is_blurry = is_blurry
         self.is_blank = is_blank
-        self.is_readable = is_readable
+        self.ocr_mean_score = ocr_mean_score
+        self.ocr_tokens = ocr_tokens
 
     def __repr__(self):
-        return f"BlurryResult(laplacian_variance={self.laplacian_variance}, is_blurry={self.is_blurry}, is_blank={self.is_blank}, is_readable={self.is_readable})"
+        return f"BlurryResult(is_blurry={self.is_blurry}, is_blank={self.is_blank}, ocr_mean_score={self.ocr_mean_score}, orc_tokens={self.ocr_tokens})"
 
     def to_dict(self):
         return {
-            "laplacianVariance": self.laplacian_variance,
             "isBlurry": self.is_blurry,
             "isBlank": self.is_blank,
-            "isReadable": self.is_readable
+            "ocrMeanScore": self.ocr_mean_score,
+            "ocrTokens": self.ocr_tokens,
         }
