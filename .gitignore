@@ -27,6 +27,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+evaluation/dataset/blurry
+evaluation/dataset/not_blurry
+evaluation/dataset/result
 evaluation/dataset
 
 # PyInstaller

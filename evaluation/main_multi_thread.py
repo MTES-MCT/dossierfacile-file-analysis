@@ -1,6 +1,5 @@
 import csv
 import os
-import random
 import sys
 from pathlib import Path
 from typing import Iterator, Tuple
@@ -31,6 +30,7 @@ except Exception:
 
 from contextlib import contextmanager
 from dossierfacile_file_analysis.custom_logging.logging_config import logger as app_logger
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 DATASET_ROOT = Path(__file__).parent / "dataset"
@@ -70,14 +70,14 @@ def iter_files_with_label() -> Iterator[Tuple[Path, bool]]:
                 yield p, label
 
 
-def decide_final_blurry(laplace_is_blurry: bool, is_readable: bool) -> bool:
+def decide_final_blurry(is_blurry) -> bool:
     """Decision rule (updated):
     - If Laplace says blurry (True) => final is blurry.
     - Else, if the document is not readable (is_readable=False) => final is blurry.
     - Else => final is not blurry.
     Equivalent: laplace_is_blurry or (not is_readable)
     """
-    return is_readable
+    return is_blurry
 
 
 # Barre de progression (fallback si Rich indisponible)
@@ -111,11 +111,11 @@ def muted_app_logger():
         app_logger.disabled = prev_disabled
 
 
-def compare_algorithms_placeholder(is_blurry: bool, is_readable: bool, expected_blurry: bool) -> str:
+def compare_algorithms_placeholder(is_blurry: bool, expected_blurry: bool) -> str:
     """Apply the decision rule and summarize the comparison to the dataset label.
     Returns a compact verdict: tp/tn/fp/fn with final and expected.
     """
-    final_pred = decide_final_blurry(is_blurry, is_readable)
+    final_pred = decide_final_blurry(is_blurry)
     if final_pred and expected_blurry:
         verdict = "tp"
     elif (not final_pred) and (not expected_blurry):
@@ -149,8 +149,9 @@ def _safe_copy_to_bucket(src: Path, dest_base: Path, relative_under: Path) -> No
 
 
 def _process_one_file(file_path: Path, label_blurry: bool) -> dict:
-    """Traite un fichier (séquentiel) et retourne une ligne dict prête à être écrite dans le CSV.
-    Copie les FP/FN dans result/TP_NP/FP et result/TP_NP/FN et nettoie les temporaires.
+    """Traite un fichier en isolant la logique pour exécution en thread.
+    Retourne une ligne dict prête à être écrite dans le CSV. Assure le cleanup local.
+    Copie les FP/FN dans result/TP_NP/FP et result/TP_NP/FN.
     """
     ctx = None
     try:
@@ -161,9 +162,11 @@ def _process_one_file(file_path: Path, label_blurry: bool) -> dict:
             file_type=mime,
         )
 
+        # Créer des instances locales des tasks pour éviter tout état partagé entre threads
         prepare_task = PrepareDataForAnalysis()
         analyse_task = AnalyseFiles()
 
+        # Contexte minimal; file_id non pertinent en offline
         ctx = BlurryExecutionContext(queue_message=BlurryQueueMessage(file_id=0))
         ctx.downloaded_file = downloaded
 
@@ -177,16 +180,16 @@ def _process_one_file(file_path: Path, label_blurry: bool) -> dict:
         if analyse_task.has_to_apply(ctx):
             analyse_task.run(ctx)
         else:
+            # No input data, return no_result
             return {
                 "relative_path": str(file_path.relative_to(DATASET_ROOT)),
                 "label_blurry": int(label_blurry),
                 "file_type": mime,
-                "laplace_is_blurry": "",
                 "predicted_is_blurry": "",
-                "laplacian_variance": "",
                 "is_blank": "",
                 "is_readable_tesseract": "",
                 "ocr_mean_score": "",
+                "ocr_tokens_count": "",
                 "compare_summary": "no_input",
             }
 
@@ -196,16 +199,15 @@ def _process_one_file(file_path: Path, label_blurry: bool) -> dict:
                 "relative_path": str(file_path.relative_to(DATASET_ROOT)),
                 "label_blurry": int(label_blurry),
                 "file_type": mime,
-                "laplace_is_blurry": "",
                 "predicted_is_blurry": "",
-                "laplacian_variance": "",
                 "is_blank": "",
                 "is_readable_tesseract": "",
                 "ocr_mean_score": "",
+                "ocr_tokens_count": "",
                 "compare_summary": "no_result",
             }
 
-        final_pred_blurry = decide_final_blurry(result.is_blurry, result.is_readable)
+        final_pred_blurry = decide_final_blurry(result.is_blurry)
 
         # verdict pour routing FP/FN
         if final_pred_blurry and (not label_blurry):
@@ -227,12 +229,11 @@ def _process_one_file(file_path: Path, label_blurry: bool) -> dict:
             "relative_path": str(file_path.relative_to(DATASET_ROOT)),
             "label_blurry": int(label_blurry),
             "file_type": mime,
-            "laplace_is_blurry": int(bool(result.is_blurry)),
             "predicted_is_blurry": int(bool(final_pred_blurry)),
-            "laplacian_variance": result.laplacian_variance,
             "is_blank": int(bool(result.is_blank)),
-            "is_readable_tesseract": int(bool(result.is_readable)),
+            "is_readable_tesseract": int(bool(result.is_blurry)),
             "ocr_mean_score": result.ocr_mean_score,
+            "ocr_tokens_count": result.ocr_tokens,
             "compare_summary": compare_summary,
         }
     except Exception as e:
@@ -240,12 +241,11 @@ def _process_one_file(file_path: Path, label_blurry: bool) -> dict:
             "relative_path": str(file_path.relative_to(DATASET_ROOT)) if DATASET_ROOT in file_path.parents else str(file_path),
             "label_blurry": int(label_blurry),
             "file_type": infer_mime_type(file_path),
-            "laplace_is_blurry": "",
             "predicted_is_blurry": "",
-            "laplacian_variance": "",
             "is_blank": "",
             "is_readable_tesseract": "",
             "ocr_mean_score": "",
+            "ocr_tokens_count": "",
             "compare_summary": f"error: {e}",
         }
     finally:
@@ -275,7 +275,6 @@ def main():
 
     # Pré-calcul des fichiers à traiter pour connaître le total
     files_with_label = list(iter_files_with_label())
-    random.shuffle(files_with_label)
     total = len(files_with_label)
 
     # CSV header
@@ -283,12 +282,11 @@ def main():
         "relative_path",
         "label_blurry",
         "file_type",
-        "laplace_is_blurry",
         "predicted_is_blurry",
-        "laplacian_variance",
         "is_blank",
         "is_readable_tesseract",
         "ocr_mean_score",
+        "ocr_tokens_count",
         "compare_summary"
     ]
 
@@ -300,6 +298,7 @@ def main():
 
         # Désactivation des logs applicatifs pendant le traitement pour une progression propre
         with muted_app_logger():
+            # Exécute en parallèle sur 4 threads et maintient la progression dans le thread principal
             if RICH_AVAILABLE:
                 progress = Progress(
                     SpinnerColumn(),
@@ -313,19 +312,29 @@ def main():
                 )
                 with progress:
                     task_id = progress.add_task("evaluate", total=total)
-                    for file_path, label_blurry in files_with_label:
-                        row = _process_one_file(file_path, label_blurry)
-                        writer.writerow(row)
-                        processed += 1
-                        progress.update(task_id, advance=1)
+                    with ThreadPoolExecutor(max_workers=4) as executor:
+                        futures = [
+                            executor.submit(_process_one_file, file_path, label_blurry)
+                            for file_path, label_blurry in files_with_label
+                        ]
+                        for fut in as_completed(futures):
+                            row = fut.result()
+                            writer.writerow(row)
+                            processed += 1
+                            progress.update(task_id, advance=1)
             else:
                 # Fallback simple sur stderr avec progression manuelle
                 _update_progress_bar(processed, total, prefix="Evaluating files")
-                for file_path, label_blurry in files_with_label:
-                    row = _process_one_file(file_path, label_blurry)
-                    writer.writerow(row)
-                    processed += 1
-                    _update_progress_bar(processed, total, prefix="Evaluating files")
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    futures = [
+                        executor.submit(_process_one_file, file_path, label_blurry)
+                        for file_path, label_blurry in files_with_label
+                    ]
+                    for fut in as_completed(futures):
+                        row = fut.result()
+                        writer.writerow(row)
+                        processed += 1
+                        _update_progress_bar(processed, total, prefix="Evaluating files")
 
     print(f"Evaluation completed. Results written to: {RESULT_CSV}")
 
