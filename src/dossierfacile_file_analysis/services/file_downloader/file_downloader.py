@@ -82,6 +82,9 @@ class FileDownloader(ABC):
                 raise EncryptionKeyIsMissingException(file_id=file_dto.id)
 
             # Écrire le fichier déchiffré
+            dir_name = os.path.dirname(destination_path)
+            if dir_name:
+                os.makedirs(dir_name, exist_ok=True)
             with open(destination_path, "wb") as decrypted_file:
                 decrypted_file.write(decrypted_data)
 

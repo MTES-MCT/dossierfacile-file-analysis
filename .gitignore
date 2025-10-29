@@ -27,6 +27,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+evaluation/dataset
+
 # PyInstaller
 #  Usually these files are created by a CI server and aren't needed outside of it
 *.manifest
