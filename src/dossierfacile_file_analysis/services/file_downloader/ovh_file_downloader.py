@@ -12,9 +12,9 @@ from dossierfacile_file_analysis.services.file_downloader.file_downloader import
 
 class OVHFileDownloader(FileDownloader):
 
-    def __init__(self):
+    def __init__(self, local_file_path: str = None):
         logger.info("Initializing OVHFileDownloader")
-        super().__init__()
+        super().__init__(local_file_path)
         self.encrypted_file_path = "/tmp/encrypted_file"
         self.s3_client = boto3.client(
             "s3",

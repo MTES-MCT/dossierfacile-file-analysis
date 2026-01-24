@@ -4,7 +4,6 @@ from hashlib import sha256, md5
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-
 from dossierfacile_file_analysis.custom_logging.logging_config import logger
 from dossierfacile_file_analysis.data.file_dto import FileDto
 from dossierfacile_file_analysis.exceptions.encryption_key_is_missing import EncryptionKeyIsMissingException
@@ -13,8 +12,11 @@ from dossierfacile_file_analysis.models.downloaded_file import DownloadedFile
 
 class FileDownloader(ABC):
 
-    def __init__(self):
-        self.local_file_path = os.getenv("LOCAL_FILE_PATH")
+    def __init__(self, local_file_path: str = None):
+        if local_file_path:
+            self.local_file_path = local_file_path
+        else:
+            self.local_file_path = os.getenv("LOCAL_FILE_PATH")
 
     @abstractmethod
     def download_file(self, file_dto: FileDto) -> DownloadedFile | None:
